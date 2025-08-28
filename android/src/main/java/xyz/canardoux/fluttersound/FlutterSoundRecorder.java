@@ -47,6 +47,7 @@ public class FlutterSoundRecorder extends FlutterSoundSession implements FlautoR
 	final static String             TAG                = "FlutterSoundRecorder";
 	FlautoRecorder m_recorder;
 	private AudioSessionManager audioSessionManager;
+	private EchoCancellationManager echoCancellationManager;
 	private boolean echoCancellationEnabled = false;
 	private AudioManager.OnAudioFocusChangeListener audioFocusChangeListener;
 
@@ -139,14 +140,17 @@ public class FlutterSoundRecorder extends FlutterSoundSession implements FlautoR
 			Context context = xyz.canardoux.TauEngine.Flauto.androidContext;
 			if (context != null) {
 				audioSessionManager = AudioSessionManager.getInstance(context);
-				if (echoCancellationEnabled) {
-					audioSessionManager.enableEchoCancellation();
-				}
+				echoCancellationManager = EchoCancellationManager.getInstance(context);
+				
 				audioSessionManager.requestAudioFocus(
 					audioFocusChangeListener,
 					AudioManager.STREAM_VOICE_CALL,
 					AudioManager.AUDIOFOCUS_GAIN
 				);
+				
+				if (echoCancellationEnabled) {
+					echoCancellationManager.enableEchoCancellation();
+				}
 			}
 			result.success("openRecorder");
 		} else
@@ -155,6 +159,9 @@ public class FlutterSoundRecorder extends FlutterSoundSession implements FlautoR
 
 	void closeRecorder ( final MethodCall call, final Result result )
 	{
+		if (echoCancellationManager != null) {
+			echoCancellationManager.disableEchoCancellation();
+		}
 		if (audioSessionManager != null) {
 			audioSessionManager.releaseAudioFocus(audioFocusChangeListener);
 		}
@@ -324,20 +331,26 @@ public class FlutterSoundRecorder extends FlutterSoundSession implements FlautoR
 
 	public void enableEchoCancellation(final MethodCall call, final MethodChannel.Result result) {
 		try {
-			if (audioSessionManager == null) {
-				Context context = xyz.canardoux.TauEngine.Flauto.androidContext;
-				if (context != null) {
-					audioSessionManager = AudioSessionManager.getInstance(context);
-				} else {
-					result.error("CONTEXT_NULL", "Android context is null", null);
-					return;
-				}
+			Context context = xyz.canardoux.TauEngine.Flauto.androidContext;
+			if (context == null) {
+				result.error("CONTEXT_NULL", "Android context is null", null);
+				return;
+			}
+
+			if (echoCancellationManager == null) {
+				echoCancellationManager = EchoCancellationManager.getInstance(context);
 			}
 
 			echoCancellationEnabled = true;
-			audioSessionManager.enableEchoCancellation();
-			log(t_LOG_LEVEL.INFO, "Echo cancellation enabled");
-			result.success("Echo cancellation enabled");
+			boolean success = echoCancellationManager.enableEchoCancellation();
+			
+			if (success) {
+				log(t_LOG_LEVEL.INFO, "Echo cancellation enabled successfully");
+				result.success("Echo cancellation enabled - MODE_IN_COMMUNICATION with hardware AEC");
+			} else {
+				log(t_LOG_LEVEL.WARNING, "Echo cancellation partially enabled");
+				result.success("Echo cancellation enabled - software fallback mode");
+			}
 		} catch (Exception e) {
 			log(t_LOG_LEVEL.ERROR, "Failed to enable echo cancellation: " + e.getMessage());
 			result.error("ECHO_CANCELLATION_ERROR", "Failed to enable echo cancellation", e.getMessage());
@@ -346,10 +359,14 @@ public class FlutterSoundRecorder extends FlutterSoundSession implements FlautoR
 
 	public void disableEchoCancellation(final MethodCall call, final MethodChannel.Result result) {
 		try {
-			if (audioSessionManager != null) {
-				echoCancellationEnabled = false;
-				audioSessionManager.disableEchoCancellation();
-				log(t_LOG_LEVEL.INFO, "Echo cancellation disabled");
+			echoCancellationEnabled = false;
+			if (echoCancellationManager != null) {
+				boolean success = echoCancellationManager.disableEchoCancellation();
+				if (success) {
+					log(t_LOG_LEVEL.INFO, "Echo cancellation disabled successfully");
+				} else {
+					log(t_LOG_LEVEL.WARNING, "Echo cancellation disable had issues");
+				}
 			}
 			result.success("Echo cancellation disabled");
 		} catch (Exception e) {
@@ -399,6 +416,27 @@ public class FlutterSoundRecorder extends FlutterSoundSession implements FlautoR
 		} catch (Exception e) {
 			log(t_LOG_LEVEL.ERROR, "Failed to release audio focus: " + e.getMessage());
 			result.error("AUDIO_FOCUS_ERROR", "Failed to release audio focus", e.getMessage());
+		}
+	}
+
+	public void getEchoCancellationSupport(final MethodCall call, final MethodChannel.Result result) {
+		try {
+			boolean isSupported = EchoCancellationManager.isEchoCancellationSupported();
+			String supportInfo = EchoCancellationManager.getEchoCancellationSupportInfo();
+			
+			Map<String, Object> response = new HashMap<>();
+			response.put("isSupported", isSupported);
+			response.put("supportDetails", supportInfo);
+			response.put("androidVersion", android.os.Build.VERSION.SDK_INT);
+			response.put("device", android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL);
+			
+			log(t_LOG_LEVEL.INFO, "Echo cancellation support: " + isSupported);
+			log(t_LOG_LEVEL.INFO, "Support details: " + supportInfo);
+			
+			result.success(response);
+		} catch (Exception e) {
+			log(t_LOG_LEVEL.ERROR, "Failed to get echo cancellation support info: " + e.getMessage());
+			result.error("SUPPORT_INFO_ERROR", "Failed to get support information", e.getMessage());
 		}
 	}
 

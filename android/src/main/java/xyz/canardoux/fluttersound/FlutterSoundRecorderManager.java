@@ -170,6 +170,12 @@ class FlutterSoundRecorderManager extends FlutterSoundManager
                         }
                         break;
 
+                        case "getEchoCancellationSupport":
+                        {
+                                aRecorder.getEchoCancellationSupport ( call, result );
+                        }
+                        break;
+
                         default:
                         {
                                 result.notImplemented ();

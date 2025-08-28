@@ -23,6 +23,9 @@ import android.content.Context;
 import android.media.AudioManager;
 import android.media.AudioFocusRequest;
 import android.media.AudioAttributes;
+import android.media.audiofx.AcousticEchoCanceler;
+import android.media.audiofx.NoiseSuppressor;
+import android.media.audiofx.AutomaticGainControl;
 import android.os.Build;
 import android.util.Log;
 
@@ -35,6 +38,10 @@ public class AudioSessionManager {
     private AudioFocusRequest audioFocusRequest;
     private AtomicInteger activeSessionCount = new AtomicInteger(0);
     private boolean audioFocusGranted = false;
+    private AcousticEchoCanceler aec;
+    private NoiseSuppressor noiseSuppressor;
+    private AutomaticGainControl agc;
+    private int currentAudioSessionId = -1;
 
     private AudioSessionManager(Context context) {
         audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
@@ -104,8 +111,8 @@ public class AudioSessionManager {
     public synchronized void configureForCommunication() {
         if (audioManager != null) {
             audioManager.setMode(AudioManager.MODE_IN_COMMUNICATION);
-            audioManager.setSpeakerphoneOn(false);
-            Log.d(TAG, "Audio session configured for communication mode");
+            audioManager.setSpeakerphoneOn(true); // Enable speakerphone for better echo cancellation
+            Log.d(TAG, "Audio session configured for communication mode with speakerphone");
         }
     }
 
@@ -116,12 +123,87 @@ public class AudioSessionManager {
         }
     }
 
-    public synchronized void enableEchoCancellation() {
+    public synchronized void enableEchoCancellation(int audioSessionId) {
+        if (currentAudioSessionId != audioSessionId) {
+            releaseAudioEffects();
+            currentAudioSessionId = audioSessionId;
+        }
+        
         configureForCommunication();
+        setupAudioEffects(audioSessionId);
     }
 
     public synchronized void disableEchoCancellation() {
         configureForMedia();
+        releaseAudioEffects();
+    }
+    
+    private void setupAudioEffects(int audioSessionId) {
+        try {
+            // Setup Acoustic Echo Canceler
+            if (AcousticEchoCanceler.isAvailable() && aec == null) {
+                aec = AcousticEchoCanceler.create(audioSessionId);
+                if (aec != null) {
+                    aec.setEnabled(true);
+                    Log.d(TAG, "AcousticEchoCanceler enabled: " + aec.getEnabled());
+                } else {
+                    Log.w(TAG, "Failed to create AcousticEchoCanceler");
+                }
+            }
+            
+            // Setup Noise Suppressor
+            if (NoiseSuppressor.isAvailable() && noiseSuppressor == null) {
+                noiseSuppressor = NoiseSuppressor.create(audioSessionId);
+                if (noiseSuppressor != null) {
+                    noiseSuppressor.setEnabled(true);
+                    Log.d(TAG, "NoiseSuppressor enabled: " + noiseSuppressor.getEnabled());
+                } else {
+                    Log.w(TAG, "Failed to create NoiseSuppressor");
+                }
+            }
+            
+            // Setup Automatic Gain Control
+            if (AutomaticGainControl.isAvailable() && agc == null) {
+                agc = AutomaticGainControl.create(audioSessionId);
+                if (agc != null) {
+                    agc.setEnabled(true);
+                    Log.d(TAG, "AutomaticGainControl enabled: " + agc.getEnabled());
+                } else {
+                    Log.w(TAG, "Failed to create AutomaticGainControl");
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error setting up audio effects", e);
+        }
+    }
+    
+    private void releaseAudioEffects() {
+        try {
+            if (aec != null) {
+                aec.setEnabled(false);
+                aec.release();
+                aec = null;
+                Log.d(TAG, "AcousticEchoCanceler released");
+            }
+            
+            if (noiseSuppressor != null) {
+                noiseSuppressor.setEnabled(false);
+                noiseSuppressor.release();
+                noiseSuppressor = null;
+                Log.d(TAG, "NoiseSuppressor released");
+            }
+            
+            if (agc != null) {
+                agc.setEnabled(false);
+                agc.release();
+                agc = null;
+                Log.d(TAG, "AutomaticGainControl released");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Error releasing audio effects", e);
+        }
+        
+        currentAudioSessionId = -1;
     }
 
     public boolean isAudioFocusGranted() {
