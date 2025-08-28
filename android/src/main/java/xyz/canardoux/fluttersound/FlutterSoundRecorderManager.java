@@ -146,6 +146,30 @@ class FlutterSoundRecorderManager extends FlutterSoundManager
                         }
                         break;
 
+                        case "enableEchoCancellation":
+                        {
+                                aRecorder.enableEchoCancellation ( call, result );
+                        }
+                        break;
+
+                        case "disableEchoCancellation":
+                        {
+                                aRecorder.disableEchoCancellation ( call, result );
+                        }
+                        break;
+
+                        case "requestAudioFocus":
+                        {
+                                aRecorder.requestAudioFocus ( call, result );
+                        }
+                        break;
+
+                        case "releaseAudioFocus":
+                        {
+                                aRecorder.releaseAudioFocus ( call, result );
+                        }
+                        break;
+
                         default:
                         {
                                 result.notImplemented ();

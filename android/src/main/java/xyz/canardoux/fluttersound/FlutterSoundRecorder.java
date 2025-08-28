@@ -20,6 +20,8 @@ package xyz.canardoux.fluttersound;
 
 
 import android.media.MediaRecorder;
+import android.media.AudioManager;
+import android.content.Context;
 
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
@@ -44,6 +46,9 @@ public class FlutterSoundRecorder extends FlutterSoundSession implements FlautoR
 	static final String ERR_RECORDER_IS_RECORDING = "ERR_RECORDER_IS_RECORDING";
 	final static String             TAG                = "FlutterSoundRecorder";
 	FlautoRecorder m_recorder;
+	private AudioSessionManager audioSessionManager;
+	private boolean echoCancellationEnabled = false;
+	private AudioManager.OnAudioFocusChangeListener audioFocusChangeListener;
 
 // =============================================================  callback ===============================================================
 
@@ -114,6 +119,7 @@ public class FlutterSoundRecorder extends FlutterSoundSession implements FlautoR
 	/* ctor */ FlutterSoundRecorder (final MethodCall call)
 	{
 		m_recorder = new FlautoRecorder(this);
+		initializeAudioFocusListener();
 	}
 
 
@@ -130,7 +136,18 @@ public class FlutterSoundRecorder extends FlutterSoundSession implements FlautoR
 		boolean r = m_recorder.openRecorder();
 		if (r)
 		{
-
+			Context context = xyz.canardoux.TauEngine.Flauto.androidContext;
+			if (context != null) {
+				audioSessionManager = AudioSessionManager.getInstance(context);
+				if (echoCancellationEnabled) {
+					audioSessionManager.enableEchoCancellation();
+				}
+				audioSessionManager.requestAudioFocus(
+					audioFocusChangeListener,
+					AudioManager.STREAM_VOICE_CALL,
+					AudioManager.AUDIOFOCUS_GAIN
+				);
+			}
 			result.success("openRecorder");
 		} else
 			result.error ( ERR_UNKNOWN, ERR_UNKNOWN, "Failure to open session");
@@ -138,6 +155,9 @@ public class FlutterSoundRecorder extends FlutterSoundSession implements FlautoR
 
 	void closeRecorder ( final MethodCall call, final Result result )
 	{
+		if (audioSessionManager != null) {
+			audioSessionManager.releaseAudioFocus(audioFocusChangeListener);
+		}
 		m_recorder.closeRecorder();
 		result.success ( "closeRecorder" );
 
@@ -280,6 +300,106 @@ public class FlutterSoundRecorder extends FlutterSoundSession implements FlautoR
 
 	public void setLogLevel (final MethodCall call, final MethodChannel.Result result )
 	{
+	}
+
+	private void initializeAudioFocusListener() {
+		audioFocusChangeListener = new AudioManager.OnAudioFocusChangeListener() {
+			@Override
+			public void onAudioFocusChange(int focusChange) {
+				switch (focusChange) {
+					case AudioManager.AUDIOFOCUS_GAIN:
+						log(t_LOG_LEVEL.DBG, "Audio focus gained");
+						break;
+					case AudioManager.AUDIOFOCUS_LOSS:
+					case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
+						log(t_LOG_LEVEL.DBG, "Audio focus lost");
+						break;
+					case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
+						log(t_LOG_LEVEL.DBG, "Audio focus lost with ducking");
+						break;
+				}
+			}
+		};
+	}
+
+	public void enableEchoCancellation(final MethodCall call, final MethodChannel.Result result) {
+		try {
+			if (audioSessionManager == null) {
+				Context context = xyz.canardoux.TauEngine.Flauto.androidContext;
+				if (context != null) {
+					audioSessionManager = AudioSessionManager.getInstance(context);
+				} else {
+					result.error("CONTEXT_NULL", "Android context is null", null);
+					return;
+				}
+			}
+
+			echoCancellationEnabled = true;
+			audioSessionManager.enableEchoCancellation();
+			log(t_LOG_LEVEL.INFO, "Echo cancellation enabled");
+			result.success("Echo cancellation enabled");
+		} catch (Exception e) {
+			log(t_LOG_LEVEL.ERROR, "Failed to enable echo cancellation: " + e.getMessage());
+			result.error("ECHO_CANCELLATION_ERROR", "Failed to enable echo cancellation", e.getMessage());
+		}
+	}
+
+	public void disableEchoCancellation(final MethodCall call, final MethodChannel.Result result) {
+		try {
+			if (audioSessionManager != null) {
+				echoCancellationEnabled = false;
+				audioSessionManager.disableEchoCancellation();
+				log(t_LOG_LEVEL.INFO, "Echo cancellation disabled");
+			}
+			result.success("Echo cancellation disabled");
+		} catch (Exception e) {
+			log(t_LOG_LEVEL.ERROR, "Failed to disable echo cancellation: " + e.getMessage());
+			result.error("ECHO_CANCELLATION_ERROR", "Failed to disable echo cancellation", e.getMessage());
+		}
+	}
+
+	public void requestAudioFocus(final MethodCall call, final MethodChannel.Result result) {
+		try {
+			if (audioSessionManager == null) {
+				Context context = xyz.canardoux.TauEngine.Flauto.androidContext;
+				if (context != null) {
+					audioSessionManager = AudioSessionManager.getInstance(context);
+				} else {
+					result.error("CONTEXT_NULL", "Android context is null", null);
+					return;
+				}
+			}
+
+			boolean granted = audioSessionManager.requestAudioFocus(
+				audioFocusChangeListener,
+				AudioManager.STREAM_VOICE_CALL,
+				AudioManager.AUDIOFOCUS_GAIN
+			);
+
+			if (granted) {
+				log(t_LOG_LEVEL.INFO, "Audio focus requested successfully");
+				result.success(true);
+			} else {
+				log(t_LOG_LEVEL.WARNING, "Audio focus request denied");
+				result.success(false);
+			}
+		} catch (Exception e) {
+			log(t_LOG_LEVEL.ERROR, "Failed to request audio focus: " + e.getMessage());
+			result.error("AUDIO_FOCUS_ERROR", "Failed to request audio focus", e.getMessage());
+		}
+	}
+
+	public void releaseAudioFocus(final MethodCall call, final MethodChannel.Result result) {
+		try {
+			if (audioSessionManager != null) {
+				audioSessionManager.releaseAudioFocus(audioFocusChangeListener);
+				log(t_LOG_LEVEL.INFO, "Audio focus released");
+			}
+			result.success("Audio focus released");
+		} catch (Exception e) {
+			log(t_LOG_LEVEL.ERROR, "Failed to release audio focus: " + e.getMessage());
+			result.error("AUDIO_FOCUS_ERROR", "Failed to release audio focus", e.getMessage());
+		}
 	}
 
 
