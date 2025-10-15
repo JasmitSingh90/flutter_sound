@@ -86,6 +86,8 @@
 {
         [self log: DBG msg: @"IOS:--> @audioPlayerDidFinishPlaying"];
         [self invokeMethod:@"audioPlayerFinishedPlaying" numberArg: [self getPlayerStatus] success: YES];
+        // Also send stream player state change notification
+        [self invokeMethod:@"streamPlayerStateChanged" numberArg: [self getPlayerStatus] success: YES];
         [self log: DBG msg: @"IOS:<-- @audioPlayerDidFinishPlaying"];
 }
 
@@ -184,6 +186,8 @@
         [self log: DBG msg: @"IOS:--> stopPlayer"];
         [flautoPlayer stopPlayer];
         NSNumber* status = [self getPlayerStatus];
+        // Send stream player state change notification
+        [self invokeMethod:@"streamPlayerStateChanged" numberArg: status success: YES];
         result(status);
         [self log: DBG msg: @"IOS:<-- stopPlayer"];
 }

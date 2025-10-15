@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Read(//Users/jasmitsingh/Codespace/iamplus/**)",
+      "Read(//Users/jasmitsingh/.pub-cache/hosted/**)",
+      "Bash(flutter pub:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(pod install:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(clang:*)",
+      "Bash(dart analyze:*)",
+      "Bash(flutter clean:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

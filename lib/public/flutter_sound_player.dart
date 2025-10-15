@@ -268,6 +268,11 @@ class FlutterSoundPlayer implements FlutterSoundPlayerCallback {
       } else {
         await stopPlayer(); // ??? Maybe !!!!!!!!!!!
       }
+    } else {
+      // For stream playback, notify the callback about state change
+      if (_audioPlayerFinishedPlaying != null) {
+        _audioPlayerFinishedPlaying?.call();
+      }
     }
     //_cleanCompleters(); // We have problem when the record is finished and a resume is pending
 
@@ -1257,6 +1262,7 @@ class FlutterSoundPlayer implements FlutterSoundPlayerCallback {
     required int sampleRate, // = 48000,
     required int bufferSize, // = 1024,
     TWhenFinished? onBufferUnderlow,
+    TWhenFinished? whenFinished, // Callback when player stops/finishes
   }) async {
     await _lock.synchronized(() async {
       await _startPlayerFromStream(
@@ -1266,6 +1272,7 @@ class FlutterSoundPlayer implements FlutterSoundPlayerCallback {
         numChannels: numChannels,
         bufferSize: bufferSize,
         onBufferUnderflow: onBufferUnderlow,
+        whenFinished: whenFinished,
       );
     });
   }
@@ -1277,6 +1284,7 @@ class FlutterSoundPlayer implements FlutterSoundPlayerCallback {
     int sampleRate = 16000,
     int bufferSize = 8192,
     TWhenFinished? onBufferUnderflow,
+    TWhenFinished? whenFinished,
   }) async {
     _logger.d('FS:---> startPlayerFromStream ');
     await _waitOpen();
@@ -1322,7 +1330,8 @@ class FlutterSoundPlayer implements FlutterSoundPlayerCallback {
       _logger.w('Killing another startPlayer()');
       _startPlayerCompleter!.completeError('Killed by another startPlayer()');
     }
-    _audioPlayerFinishedPlaying = onBufferUnderflow;
+    // Use whenFinished if provided, otherwise use onBufferUnderflow for backward compatibility
+    _audioPlayerFinishedPlaying = whenFinished ?? onBufferUnderflow;
     _fromStream = true;
 
     try {
